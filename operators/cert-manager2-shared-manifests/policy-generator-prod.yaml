@@ -3,6 +3,8 @@ apiVersion: policy.open-cluster-management.io/v1
 kind: PolicyGenerator
 metadata:
   name: gen-policy-certmanager-prod
+placementBindingDefaults:
+  name: binding-cert-manager-prod
 policyDefaults:
   namespace: acm-policies
   remediationAction: enforce
@@ -10,8 +12,6 @@ policyDefaults:
   severity: medium
   placement:
     placementName: cert-manager-prod-placement
-  placementBindingDefaults:
-    name: binding-cert-manager-prod
   categories:
     - "CM Configuration Management"
   controls:
