@@ -1,0 +1,41 @@
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PolicyGenerator
+metadata:
+  name: gen-policy-certmanager
+policyDefaults:
+  namespace: acm-policies
+  remediationAction: enforce
+  consolidateManifests: false
+  severity: medium
+  placement:
+    placementName: cert-manager-placement
+  categories:
+    - "CM Configuration Management"
+  controls:
+    - "CM-2 Baseline Configuration"
+  standards:
+    - "NIST SP 800-53"
+
+policies:
+  - name: cert-manager-operator
+    description: "Installs cert-manager operator, monitoring, and CA secret"
+    manifests:
+      - path: namespace.yml
+        name: cert-manager-operator
+
+      - path: trusted-ca-configmap.yml
+        name: trusted-ca-configmap
+
+      - path: operatorpolicy.yml
+        name: cert-manager-operator-install
+
+      - path: health/cert-manager-status.yml
+        name: cert-manager-status
+        remediationAction: InformOnly
+
+      - path: cert-manager-namespace.yml
+        name: cert-manager-namespace
+
+      - path: ca-clusterissuer-secret.yml
+        name: ca-clusterissuer-secret
