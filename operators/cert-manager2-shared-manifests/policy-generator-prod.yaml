@@ -10,6 +10,8 @@ policyDefaults:
   severity: medium
   placement:
     placementName: cert-manager-prod-placement
+  placementBindingDefaults:
+    name: binding-cert-manager-prod
   categories:
     - "CM Configuration Management"
   controls:
