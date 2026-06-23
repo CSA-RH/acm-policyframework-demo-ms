@@ -10,7 +10,7 @@ spec:
         revision: main
         directories:
           - path: operators/compliance-operator/base
-          - path: operators/cert-manager2-shared-manifests
+          - path: operators/cert-manager2-shared-manifests/policies/*
   template:
     metadata:
       name: 'acm-operators-{{path[1]}}-{{path.basename}}'

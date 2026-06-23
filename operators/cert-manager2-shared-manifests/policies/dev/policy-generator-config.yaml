@@ -3,6 +3,8 @@ apiVersion: policy.open-cluster-management.io/v1
 kind: PolicyGenerator
 metadata:
   name: gen-policy-certmanager-dev
+placementBindingDefaults:
+  name: binding-cert-manager-dev
 policyDefaults:
   namespace: acm-policies
   remediationAction: enforce
@@ -21,23 +23,23 @@ policies:
   - name: dev-cert-manager-operator
     description: "Installs cert-manager operator on dev clusters"
     manifests:
-      - path: ../../manifests/base/namespace.yml
+      - path: manifests/base/namespace.yml
         name: cert-manager-operator-namespace
 
-      - path: ../../manifests/base/trusted-ca-configmap.yml
+      - path: manifests/base/trusted-ca-configmap.yml
         name: trusted-ca-configmap
 
-      - path: ../../manifests/base/operatorpolicy.yml
+      - path: manifests/base/operatorpolicy.yml
         name: cert-manager-operator-install
 
-      - path: ../../manifests/health/cert-manager-status.yml
+      - path: manifests/health/cert-manager-status.yml
         name: cert-manager-status
         remediationAction: InformOnly
 
-      - path: ../../manifests/base/cert-manager-namespace.yml
+      - path: manifests/base/cert-manager-namespace.yml
         name: cert-manager-namespace
 
-      - path: ../../manifests/base/ca-clusterissuer-secret.yml
+      - path: manifests/base/ca-clusterissuer-secret.yml
         name: ca-clusterissuer-secret
 
   - name: dev-cert-manager-clusterissuer
