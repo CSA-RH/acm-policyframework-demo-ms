@@ -1,0 +1,32 @@
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PolicyGenerator
+metadata:
+  name: gen-policy-web-terminal
+policyDefaults:
+  namespace: acm-policies
+  remediationAction: enforce
+  consolidateManifests: false
+  policySets:
+    - hub-operators
+  generatePlacementWhenInSet: false
+
+  categories:
+    - CM Configuration Management
+  controls:
+    - CM-2 Baseline Configuration
+  standards:
+    - NIST SP 800-53
+
+  severity: low
+
+policies:
+  - name: web-terminal-operator
+    description: "Installs the Web Terminal operator on the hub cluster"
+    manifests:
+      - path: manifests/operatorpolicy.yml
+
+policySets:
+  - name: hub-operators
+    description: "Operator policies for the hub cluster only"
+    generatePolicySetPlacement: false

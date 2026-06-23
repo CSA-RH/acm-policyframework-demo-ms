@@ -12,6 +12,7 @@ spec:
           - path: operators/compliance-operator/base
           - path: operators/cert-manager1-base-with-overlays/base
           - path: operators/cert-manager1-base-with-overlays/overlays/*
+          - path: operators/web-terminal/base
   template:
     metadata:
       name: 'acm-operators-{{path[1]}}-{{path.basename}}'
