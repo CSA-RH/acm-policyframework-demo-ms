@@ -1,0 +1,31 @@
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: placement-all-clusters-operators
+  namespace: acm-policies
+spec:
+  tolerations:
+    - key: cluster.open-cluster-management.io/unavailable
+      operator: Exists
+    - key: cluster.open-cluster-management.io/unreachable
+      operator: Exists
+  predicates:
+    - requiredClusterSelector:
+        labelSelector:
+          matchLabels:
+            vendor: OpenShift
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: binding-all-clusters-operators
+  namespace: acm-policies
+placementRef:
+  name: placement-all-clusters-operators
+  kind: Placement
+  apiGroup: cluster.open-cluster-management.io
+subjects:
+  - name: all-clusters-operators
+    kind: PolicySet
+    apiGroup: policy.open-cluster-management.io

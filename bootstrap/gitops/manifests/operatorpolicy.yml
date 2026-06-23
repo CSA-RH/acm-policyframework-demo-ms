@@ -1,0 +1,26 @@
+---
+apiVersion: policy.open-cluster-management.io/v1beta1
+kind: OperatorPolicy
+metadata:
+  name: install-openshift-gitops
+spec:
+  remediationAction: enforce
+  severity: critical
+  complianceType: musthave
+  complianceConfig:
+    catalogSourceUnhealthy: NonCompliant
+    deploymentsUnavailable: NonCompliant
+    deprecationsPresent: Compliant
+    upgradesAvailable: Compliant
+  subscription:
+    name: openshift-gitops-operator
+    namespace: openshift-gitops-operator
+    # Pin to a specific channel for controlled upgrades.
+    # Run: oc get packagemanifest openshift-gitops-operator -o jsonpath='{.status.channels[*].name}'
+    #channel: gitops-1.19
+    source: redhat-operators
+    sourceNamespace: openshift-marketplace
+  operatorGroup:
+    name: openshift-gitops-operator
+    namespace: openshift-gitops-operator
+  upgradeApproval: Automatic

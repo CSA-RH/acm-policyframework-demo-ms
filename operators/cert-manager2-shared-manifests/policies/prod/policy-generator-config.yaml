@@ -1,0 +1,54 @@
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PolicyGenerator
+metadata:
+  name: gen-policy-certmanager-prod
+policyDefaults:
+  namespace: acm-policies
+  remediationAction: enforce
+  consolidateManifests: false
+  severity: medium
+  placement:
+    placementName: cert-manager-prod-placement
+  categories:
+    - "CM Configuration Management"
+  controls:
+    - "CM-2 Baseline Configuration"
+  standards:
+    - "NIST SP 800-53"
+
+policies:
+  - name: prod-cert-manager-operator
+    description: "Installs cert-manager operator on prod clusters"
+    manifests:
+      - path: ../../manifests/base/namespace.yml
+        name: cert-manager-operator-namespace
+
+      - path: ../../manifests/base/trusted-ca-configmap.yml
+        name: trusted-ca-configmap
+
+      - path: ../../manifests/base/operatorpolicy.yml
+        name: cert-manager-operator-install
+
+      - path: ../../manifests/health/cert-manager-status.yml
+        name: cert-manager-status
+        remediationAction: InformOnly
+
+      - path: ../../manifests/base/cert-manager-namespace.yml
+        name: cert-manager-namespace
+
+      - path: ../../manifests/base/ca-clusterissuer-secret.yml
+        name: ca-clusterissuer-secret
+
+  - name: prod-cert-manager-clusterissuer
+    description: "Deploys prod CA based ClusterIssuer"
+    dependencies:
+      - name: prod-cert-manager-operator
+        compliance: Compliant
+    manifests:
+      - path: ca-clusterissuer.yml
+        name: ca-clusterissuer-prod
+        extraDependencies:
+          - name: ca-clusterissuer-secret
+            kind: ConfigurationPolicy
+            compliance: "Compliant"

@@ -1,0 +1,31 @@
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: placement-gitops
+  namespace: acm-policies
+spec:
+  tolerations:
+    - key: cluster.open-cluster-management.io/unavailable
+      operator: Exists
+    - key: cluster.open-cluster-management.io/unreachable
+      operator: Exists
+  predicates:
+    - requiredClusterSelector:
+        labelSelector:
+          matchLabels:
+            name: local-cluster
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: binding-gitops
+  namespace: acm-policies
+placementRef:
+  name: placement-gitops
+  kind: Placement
+  apiGroup: cluster.open-cluster-management.io
+subjects:
+  - name: gitops
+    kind: PolicySet
+    apiGroup: policy.open-cluster-management.io

@@ -1,0 +1,64 @@
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PolicyGenerator
+metadata:
+  name: gen-policy-compliance
+policyDefaults:
+  namespace: acm-policies
+  remediationAction: enforce
+  consolidateManifests: false
+  policySets:
+    - all-clusters-operators
+  generatePlacementWhenInSet: false
+
+  categories:
+    - CM Configuration Management
+  controls:
+    - CM-2 Baseline Configuration
+  standards:
+    - NIST SP 800-53
+
+  policyLabels:
+    policy_gen.name: compliance-operator
+
+  severity: medium
+
+policies:
+  - name: compliance-operator
+    description: "Installs the Compliance Operator"
+    remediationAction: enforce
+    manifests:
+      - path: manifests/namespace.yml
+        name: compliance-namespace
+
+      - path: manifests/operatorpolicy.yml
+
+  - name: compliance-cis-scan
+    description: "Deploys the CIS benchmark scan configuration"
+    remediationAction: enforce
+    severity: high
+    manifests:
+      - path: manifests/scan/scansetting-cis.yml
+        name: compliance-scansetting-cis
+        complianceType: musthave
+
+      - path: manifests/scan/scansettingbinding-cis.yml
+        name: compliance-scansettingbinding-cis
+        complianceType: mustonlyhave
+
+  - name: compliance-cis-results
+    description: "Reports CIS scan results — non-compliant when checks fail"
+    remediationAction: inform
+    severity: high
+    standards:
+      - NIST SP 800-53
+      - CIS OpenShift Container Platform 4 Benchmark
+    manifests:
+      - path: manifests/scan/cis-suite-status.yml
+
+      - path: manifests/scan/cis-results.yml
+
+policySets:
+  - name: all-clusters-operators
+    description: "Operator policies for all managed clusters (enforce + inform)"
+    generatePolicySetPlacement: false

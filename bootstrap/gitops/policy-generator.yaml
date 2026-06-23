@@ -1,0 +1,37 @@
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PolicyGenerator
+metadata:
+  name: gen-policy-gitops
+policyDefaults:
+  namespace: acm-policies
+  remediationAction: enforce
+  consolidateManifests: false
+  policySets:
+    - gitops
+  generatePlacementWhenInSet: false
+
+  categories:
+    - CM Configuration Management
+  controls:
+    - CM-2 Baseline Configuration
+  standards:
+    - NIST SP 800-53
+
+  severity: critical
+
+policies:
+  - name: gitops-operator
+    description: "Installs OpenShift GitOps and configures ArgoCD with the PolicyGenerator plugin"
+    manifests:
+      - path: manifests/namespace.yml
+        name: ensure-openshift-gitops-namespace
+
+      - path: manifests/operatorpolicy.yml
+
+      - path: manifests/argocd-policygenerator.yaml
+
+policySets:
+  - name: gitops
+    description: "GitOps operator and ArgoCD configuration for the hub cluster"
+    generatePolicySetPlacement: false

@@ -1,0 +1,28 @@
+# =============================================================================
+# CIS ComplianceSuite status check
+#
+# Verifies the CIS ComplianceSuite has completed scanning.
+# Non-compliant if the suite does not exist, is still running, or
+# has not reached the DONE phase.
+#
+# The ComplianceSuite name matches the ScanSettingBinding name
+# (cis-compliance) and is created automatically by the Compliance
+# Operator when the ScanSettingBinding is applied.
+# =============================================================================
+apiVersion: policy.open-cluster-management.io/v1
+kind: ConfigurationPolicy
+metadata:
+  name: cis-suite-status
+spec:
+  remediationAction: inform
+  severity: high
+  object-templates:
+    - complianceType: musthave
+      objectDefinition:
+        apiVersion: compliance.openshift.io/v1alpha1
+        kind: ComplianceSuite
+        metadata:
+          name: cis-compliance
+          namespace: openshift-compliance
+        status:
+          phase: DONE

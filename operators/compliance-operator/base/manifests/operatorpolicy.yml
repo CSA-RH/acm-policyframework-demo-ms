@@ -1,0 +1,40 @@
+---
+apiVersion: policy.open-cluster-management.io/v1beta1
+kind: OperatorPolicy
+metadata:
+  name: compliance-operator-install
+spec:
+  complianceType: musthave
+  complianceConfig:
+    catalogSourceUnhealthy: NonCompliant
+    deploymentsUnavailable: NonCompliant
+    deprecationsPresent: Compliant
+    upgradesAvailable: Compliant
+  remediationAction: enforce
+  removalBehavior:
+    clusterServiceVersions: Delete
+    customResourceDefinitions: Delete
+    operatorGroups: DeleteIfUnused
+    subscriptions: Delete
+  severity: critical
+  upgradeApproval: Automatic
+  versions:
+    - compliance-operator.v0.1.61
+    - compliance-operator.v1.7.0
+    - compliance-operator.v1.9.1
+  subscription:
+    channel: stable
+    name: compliance-operator
+    namespace: openshift-compliance
+    source: redhat-operators
+    sourceNamespace: openshift-marketplace
+    config:
+      nodeSelector:
+        node-role.kubernetes.io/worker: ""
+      # env:
+      # - name: PLATFORM
+      #   value: "HyperShift"
+  operatorGroup:
+    name: compliance-operator
+    targetNamespaces:
+      - openshift-compliance

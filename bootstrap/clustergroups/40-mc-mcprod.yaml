@@ -1,0 +1,11 @@
+apiVersion: cluster.open-cluster-management.io/v1
+kind: ManagedCluster
+metadata:
+  #This must be the name of the cluster
+  name: cluster1
+  labels:
+    cluster.open-cluster-management.io/clusterset: mceprod
+    environment: prod
+
+#oc label managedcluster cluster1 cluster.open-cluster-management.io/clusterset=mceprod --overwrite
+#oc label ManagedCluster cluster1 environment=prod

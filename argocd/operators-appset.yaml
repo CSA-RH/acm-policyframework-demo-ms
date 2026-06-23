@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: acm-operators
+  namespace: openshift-gitops
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/CSA-RH/acm-policies-demo-ms.git
+        revision: main
+        directories:
+          - path: operators/compliance-operator/base
+          - path: operators/cert-manager2-shared-manifests/policies/*
+  template:
+    metadata:
+      name: 'acm-operators-{{path[1]}}-{{path.basename}}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/CSA-RH/acm-policies-demo-ms.git
+        targetRevision: main
+        path: '{{path}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: acm-policies
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true

@@ -1,0 +1,55 @@
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: ConfigurationPolicy
+metadata:
+  name: configure-argocd-policygenerator
+spec:
+  remediationAction: enforce
+  severity: critical
+  object-templates:
+    - complianceType: musthave
+      objectDefinition:
+        apiVersion: argoproj.io/v1beta1
+        kind: ArgoCD
+        metadata:
+          name: openshift-gitops
+          namespace: openshift-gitops
+        spec:
+          server:
+            route:
+              enabled: true
+          sso:
+            provider: dex
+            dex:
+              openShiftOAuth: true
+          kustomizeBuildOptions: --enable-alpha-plugins
+          applicationSet:
+            resources:
+              limits:
+                cpu: "2"
+                memory: 1Gi
+              requests:
+                cpu: 250m
+                memory: 512Mi
+          repo:
+            env:
+            - name: KUSTOMIZE_PLUGIN_HOME
+              value: /etc/kustomize/plugin
+            initContainers:
+            - args:
+              - -c
+              - cp /policy-generator/PolicyGenerator-not-fips-compliant /policy-generator-tmp/PolicyGenerator
+              command:
+              - /bin/bash
+              image: '{{ (index (lookup "apps/v1" "Deployment" "open-cluster-management" "multicluster-operators-hub-subscription").spec.template.spec.containers 0).image }}'
+              #image: registry.redhat.io/rhacm2/multicluster-operators-subscription-rhel9:v2.1?
+              name: policy-generator-install
+              volumeMounts:
+              - mountPath: /policy-generator-tmp
+                name: policy-generator
+            volumeMounts:
+            - mountPath: /etc/kustomize/plugin/policy.open-cluster-management.io/v1/policygenerator
+              name: policy-generator
+            volumes:
+            - emptyDir: {}
+              name: policy-generator

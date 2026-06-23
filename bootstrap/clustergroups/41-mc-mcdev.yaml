@@ -1,0 +1,11 @@
+apiVersion: cluster.open-cluster-management.io/v1
+kind: ManagedCluster
+metadata:
+  #This must be the name of the cluster
+  name: local-cluster
+  labels:
+    cluster.open-cluster-management.io/clusterset: mcedev
+    environment: dev
+
+#oc label managedcluster local-cluster cluster.open-cluster-management.io/clusterset=mcedev --overwrite
+#oc label ManagedCluster local-cluster environment=dev
