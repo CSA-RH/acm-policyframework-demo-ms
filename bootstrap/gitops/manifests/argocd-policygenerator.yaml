@@ -35,6 +35,8 @@ spec:
             env:
             - name: KUSTOMIZE_PLUGIN_HOME
               value: /etc/kustomize/plugin
+            - name: POLICY_GEN_DISABLE_LOAD_RESTRICTORS
+              value: "true"
             initContainers:
             - args:
               - -c
