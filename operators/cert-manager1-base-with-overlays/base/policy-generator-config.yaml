@@ -3,6 +3,8 @@ apiVersion: policy.open-cluster-management.io/v1
 kind: PolicyGenerator
 metadata:
   name: gen-policy-certmanager
+placementBindingDefaults:
+  name: binding-cert-manager-operator
 policyDefaults:
   namespace: acm-policies
   remediationAction: enforce
@@ -31,12 +33,15 @@ policies:
       - path: operatorpolicy.yml
         name: cert-manager-operator-install
 
-      - path: health/cert-manager-status.yml
-        name: cert-manager-status
-        remediationAction: InformOnly
-
       - path: cert-manager-namespace.yml
         name: cert-manager-namespace
 
       - path: ca-clusterissuer-secret.yml
         name: ca-clusterissuer-secret
+
+  - name: cert-manager-status
+    description: "Reports cert-manager deployment health — non-compliant when pods are unhealthy"
+    remediationAction: InformOnly
+    manifests:
+      - path: health/cert-manager-status.yml
+        name: cert-manager-status
