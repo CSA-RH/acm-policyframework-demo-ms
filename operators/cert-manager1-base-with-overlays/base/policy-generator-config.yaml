@@ -20,6 +20,7 @@ policyDefaults:
 policies:
   - name: cert-manager-operator
     description: "Installs cert-manager operator, monitoring, and CA secret"
+    remediationAction: enforce
     manifests:
       - path: namespace.yml
         name: cert-manager-operator
