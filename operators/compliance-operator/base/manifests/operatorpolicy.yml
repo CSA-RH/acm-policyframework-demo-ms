@@ -22,6 +22,7 @@ spec:
     - compliance-operator.v0.1.61
     - compliance-operator.v1.7.0
     - compliance-operator.v1.9.1
+    - compliance-operator.v1.10.0
   subscription:
     channel: stable
     name: compliance-operator
