@@ -25,9 +25,9 @@ policies:
   #  1. Install RHACS operator on hub and managed clusters              #
   # ------------------------------------------------------------------ #
   - name: acs-operator
-    description: "Installs the RHACS operator and creates namespaces"
+    description: "Installs the RHACS operator and creates namespaces on all ACS clusters"
     placement:
-      placementName: acs-hub-placement
+      placementName: acs-all-placement
     manifests:
       - path: operator-namespace.yml
         name: acs-operator-namespace
@@ -188,9 +188,6 @@ policies:
     manifests:
       - path: stackrox-namespace.yml
         name: acs-sensor-stackrox-ns
-
-      - path: operatorpolicy.yml
-        name: acs-sensor-operator-install
 
       - path: managed/propagate-admission-control-tls.yml
         name: propagate-admission-control-tls
