@@ -25,10 +25,3 @@ spec:
     scannerComponent: AutoSense
   scannerV4:
     scannerComponent: AutoSense
-  overlays:
-    - apiVersion: apps/v1
-      kind: DaemonSet
-      name: collector
-      patches:
-        - path: spec.template.spec.hostPID
-          value: "true"
