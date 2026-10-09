@@ -5,11 +5,25 @@ metadata:
   name: stackrox-central-services
   namespace: stackrox
 spec:
+  monitoring:
+    openshift:
+      enabled: true
   central:
     exposure:
+      loadBalancer:
+        enabled: false
+        port: 443
+      nodePort:
+        enabled: false
       route:
         enabled: true
+    telemetry:
+      enabled: true
     db:
+      isEnabled: Default
+      persistence:
+        persistentVolumeClaim:
+          claimName: central-db
       resources:
         requests:
           cpu: 500m
@@ -24,11 +38,27 @@ spec:
       limits:
         cpu: "2"
         memory: 8Gi
+  egress:
+    connectivityPolicy: Online
   scanner:
     analyzer:
       scaling:
         autoScaling: Enabled
-        maxReplicas: 3
-        minReplicas: 1
-        replicas: 1
+        maxReplicas: 5
+        minReplicas: 2
+        replicas: 3
     scannerComponent: Enabled
+  scannerV4:
+    scannerComponent: Enabled
+    matcher:
+      scaling:
+        autoScaling: Enabled
+        maxReplicas: 5
+        minReplicas: 1
+        replicas: 3
+    indexer:
+      scaling:
+        autoScaling: Enabled
+        maxReplicas: 5
+        minReplicas: 1
+        replicas: 3

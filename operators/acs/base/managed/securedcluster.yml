@@ -7,10 +7,27 @@ metadata:
 spec:
   clusterName: '{{hub .ManagedClusterName hub}}'
   centralEndpoint: '{{hub (lookup "v1" "ConfigMap" "acm-policies" "acs-central-info").data.host hub}}:443'
+  monitoring:
+    openshift:
+      enabled: true
+  auditLogs:
+    collection: Auto
   admissionControl:
     enforcement: Enabled
     bypass: BreakGlassAnnotation
   perNode:
+    collector:
+      collection: EBPF
+      imageFlavor: Regular
     taintToleration: TolerateTaints
   scanner:
     scannerComponent: AutoSense
+  scannerV4:
+    scannerComponent: AutoSense
+  overlays:
+    - apiVersion: apps/v1
+      kind: DaemonSet
+      name: collector
+      patches:
+        - path: spec.template.spec.hostPID
+          value: "true"
