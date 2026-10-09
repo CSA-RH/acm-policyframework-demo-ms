@@ -6,7 +6,7 @@ metadata:
   namespace: stackrox
 spec:
   clusterName: '{{hub .ManagedClusterName hub}}'
-  centralEndpoint: '{{hub (lookup "v1" "ConfigMap" "acm-policies" "acs-central-info").data.host hub}}:443'
+  centralEndpoint: '{{ fromSecret "stackrox" "sensor-tls" "acs-host" | base64dec }}'
   monitoring:
     openshift:
       enabled: true
@@ -15,6 +15,7 @@ spec:
   admissionControl:
     enforcement: Enabled
     bypass: BreakGlassAnnotation
+    replicas: 3
   perNode:
     collector:
       collection: EBPF

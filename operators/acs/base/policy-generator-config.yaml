@@ -9,6 +9,9 @@ policyDefaults:
   namespace: acm-policies
   remediationAction: enforce
   consolidateManifests: false
+  evaluationInterval:
+    compliant: 30s
+    noncompliant: 10s
   severity: high
   categories:
     - "CM Configuration Management"
@@ -19,94 +22,194 @@ policyDefaults:
 
 policies:
   # ------------------------------------------------------------------ #
-  #  1. Hub – install RHACS operator and deploy Central                 #
+  #  1. Install RHACS operator on hub and managed clusters              #
   # ------------------------------------------------------------------ #
-  - name: acs-hub-central
-    description: "Installs the RHACS operator and deploys Central on the hub cluster"
+  - name: acs-operator
+    description: "Installs the RHACS operator and creates namespaces"
     placement:
       placementName: acs-hub-placement
     manifests:
       - path: operator-namespace.yml
-        name: acs-hub-operator-ns
+        name: acs-operator-namespace
+
+      - path: stackrox-namespace.yml
+        name: stackrox-namespace
 
       - path: operatorpolicy.yml
-        name: acs-hub-operator-install
-
-      - path: stackrox-namespace.yml
-        name: acs-hub-stackrox-ns
-
-      - path: hub/central.yml
-        name: acs-hub-central
+        name: rhacs-operator-install
 
   # ------------------------------------------------------------------ #
-  #  2. Hub – create init bundle for SecuredCluster authentication      #
-  #     Depends on: acs-hub-central (Central must be running)           #
+  #  2. Deploy Central, ConsoleLink, and health check on the hub        #
+  #     Depends on: acs-operator                                        #
   # ------------------------------------------------------------------ #
-  - name: acs-hub-init-bundle
-    description: "Creates an init bundle on Central and stores the TLS secrets on the hub"
+  - name: acs-central
+    description: "Deploys Central on the hub with health monitoring and ConsoleLink"
     placement:
       placementName: acs-hub-placement
-    extraDependencies:
-      - name: acs-hub-central
-        compliance: Compliant
+    dependencies:
+      - name: acs-operator
+        compliance: "Compliant"
+    manifests:
+      - path: hub/central.yml
+        name: stackrox-central-services
+
+      - path: hub/consolelink.yml
+        name: acs-consolelink
+
+      - path: hub/central-status.yml
+        name: acs-central-status
+        remediationAction: InformOnly
+        severity: high
+        extraDependencies:
+          - name: stackrox-central-services
+            kind: ConfigurationPolicy
+            compliance: "Compliant"
+
+  # ------------------------------------------------------------------ #
+  #  3. Create init bundle for SecuredCluster authentication             #
+  #     Depends on: acs-central                                          #
+  # ------------------------------------------------------------------ #
+  - name: acs-central-init-bundle
+    description: "Runs a Job to generate an init bundle and store TLS secrets"
+    placement:
+      placementName: acs-hub-placement
+    dependencies:
+      - name: acs-central
+        compliance: "Compliant"
     manifests:
       - path: hub/init-bundle-rbac.yml
-        name: acs-hub-init-bundle-rbac
+        name: create-cluster-init-serviceaccount
 
       - path: hub/init-bundle-job.yml
-        name: acs-hub-init-bundle-job
+        name: create-cluster-init-job
+        extraDependencies:
+          - name: create-cluster-init-serviceaccount
+            kind: ConfigurationPolicy
+            compliance: "Compliant"
 
   # ------------------------------------------------------------------ #
-  #  3. Hub – copy init bundle secrets to the policy namespace          #
-  #     The hub template lookup restricts access to the policy's own    #
-  #     namespace. This step copies the TLS secrets from stackrox to    #
-  #     acm-policies using managed-cluster templates (no restriction).  #
-  #     Also stores the Central route host for SecuredCluster config.   #
-  #     Depends on: acs-hub-init-bundle (secrets must exist on hub)     #
+  #  4. Monitor init bundle cert expiry + deploy hub SecuredCluster      #
+  #     Depends on: acs-central-init-bundle                              #
+  #     The CertificatePolicy watches sensor-tls for 720h min duration.  #
+  #     The hub SecuredCluster is gated on the cert being valid.         #
   # ------------------------------------------------------------------ #
-  - name: acs-hub-copy-secrets
-    description: "Copies ACS init bundle secrets from stackrox to the policy namespace"
+  - name: acs-central-init-bundle-cert
+    description: "Monitors init bundle certificate expiry and deploys hub SecuredCluster"
     placement:
       placementName: acs-hub-placement
-    extraDependencies:
-      - name: acs-hub-init-bundle
-        compliance: Compliant
+    dependencies:
+      - name: acs-central-init-bundle
+        compliance: "Compliant"
     manifests:
-      - path: hub/copy-secrets-to-policy-ns.yml
-        name: acs-hub-copy-secrets
+      - path: hub/sensor-tls-cert-policy.yml
+        name: acs-bundle-certificates
 
-  # ------------------------------------------------------------------ #
-  #  4. Managed – deploy SecuredCluster on managed clusters             #
-  #     The RHACS operator is installed on the hub by acs-hub-central.  #
-  #     On non-hub managed clusters the operator must be installed      #
-  #     separately (or add a dedicated operator policy for them).       #
-  #     Depends on: acs-hub-copy-secrets (Central info + TLS secrets)   #
-  # ------------------------------------------------------------------ #
-  - name: acs-managed-securedcluster
-    description: "Deploys SecuredCluster on managed clusters (RHACS operator assumed installed)"
-    placement:
-      placementName: acs-managed-placement
-    extraDependencies:
-      - name: acs-hub-copy-secrets
-        compliance: Compliant
-    manifests:
-      - path: stackrox-namespace.yml
-        name: acs-managed-stackrox-ns
+      - path: hub/expired-sensor-tls.yml
+        remediationAction: InformOnly
+        name: acs-cert-sensor-tls
 
       - path: managed/securedcluster.yml
-        name: acs-managed-securedcluster
+        name: stackrox-secured-cluster-services
+        extraDependencies:
+          - name: acs-cert-sensor-tls
+            kind: ConfigurationPolicy
+            compliance: "Compliant"
 
   # ------------------------------------------------------------------ #
-  #  5. Managed – distribute init bundle TLS secrets to managed clusters #
-  #     Depends on: acs-hub-copy-secrets (secrets in acm-policies ns)   #
+  #  5. Auto-rotate expired init bundle certificates                     #
+  #     Depends on: acs-central-init-bundle-cert being NonCompliant      #
+  #     (i.e. the cert has expired or is about to expire).               #
+  #     Deletes the three expired TLS secrets and resets the Job so      #
+  #     a new bundle is automatically regenerated.                       #
   # ------------------------------------------------------------------ #
-  - name: acs-managed-init-bundle
-    description: "Distributes the init bundle TLS secrets from the hub to managed clusters"
+  - name: acs-central-expired-certs
+    description: "Deletes expired init bundle secrets and resets the Job for regeneration"
+    complianceType: mustnothave
+    placement:
+      placementName: acs-hub-placement
+    dependencies:
+      - name: acs-central-init-bundle-cert
+        compliance: "NonCompliant"
+    ignorePending: true
+    manifests:
+      - path: hub/expired-admission-control-tls.yml
+        name: expired-admission-control-tls
+
+      - path: hub/expired-collector-tls.yml
+        name: expired-collector-tls
+
+      - path: hub/expired-sensor-tls.yml
+        name: expired-sensor-tls
+
+      - path: hub/init-bundle-job.yml
+        name: expired-init-bundle-job
+        extraDependencies:
+          - name: expired-admission-control-tls
+            kind: ConfigurationPolicy
+            compliance: "Compliant"
+          - name: expired-collector-tls
+            kind: ConfigurationPolicy
+            compliance: "Compliant"
+          - name: expired-sensor-tls
+            kind: ConfigurationPolicy
+            compliance: "Compliant"
+
+  # ------------------------------------------------------------------ #
+  #  6. Sync init bundle secrets to the policy namespace                 #
+  #     Depends on: acs-central-init-bundle-cert                         #
+  #     Uses object-templates-raw with copySecretData to copy the        #
+  #     three TLS secrets from stackrox to the policy namespace so       #
+  #     hub templates in the acs-sensor policy can access them.          #
+  # ------------------------------------------------------------------ #
+  - name: acs-sensor-sync-certs
+    description: "Syncs ACS init bundle secrets from stackrox to policy namespace"
+    placement:
+      placementName: acs-hub-placement
+    dependencies:
+      - name: acs-central-init-bundle-cert
+        compliance: "Compliant"
+    manifests:
+      - path: hub/sensor-sync-tls-certs.yml
+        name: sensor-sync-tls-certs
+
+  # ------------------------------------------------------------------ #
+  #  7. Propagate TLS secrets and deploy SecuredCluster on managed       #
+  #     Depends on: acs-sensor-sync-certs                                #
+  #     Each secret is gated as an extraDependency for the               #
+  #     SecuredCluster to ensure all three exist before deploying.       #
+  # ------------------------------------------------------------------ #
+  - name: acs-sensor
+    description: "Propagates init bundle secrets and deploys SecuredCluster on managed clusters"
     placement:
       placementName: acs-managed-placement
-    extraDependencies:
-      - name: acs-hub-copy-secrets
-        compliance: Compliant
+    dependencies:
+      - name: acs-sensor-sync-certs
+        compliance: "Compliant"
     manifests:
-      - path: managed/init-bundle-secrets.yml
-        name: acs-managed-init-bundle-secrets
+      - path: stackrox-namespace.yml
+        name: acs-sensor-stackrox-ns
+
+      - path: operatorpolicy.yml
+        name: acs-sensor-operator-install
+
+      - path: managed/propagate-admission-control-tls.yml
+        name: propagate-admission-control-tls
+
+      - path: managed/propagate-collector-tls.yml
+        name: propagate-collector-tls
+
+      - path: managed/propagate-sensor-tls.yml
+        name: propagate-sensor-tls
+
+      - path: managed/securedcluster.yml
+        name: managed-securedcluster
+        extraDependencies:
+          - name: propagate-admission-control-tls
+            kind: ConfigurationPolicy
+            compliance: "Compliant"
+          - name: propagate-collector-tls
+            kind: ConfigurationPolicy
+            compliance: "Compliant"
+          - name: propagate-sensor-tls
+            kind: ConfigurationPolicy
+            compliance: "Compliant"
