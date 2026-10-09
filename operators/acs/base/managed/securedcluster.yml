@@ -9,7 +9,6 @@ spec:
   centralEndpoint: '{{hub (lookup "v1" "ConfigMap" "acm-policies" "acs-central-info").data.host hub}}:443'
   admissionControl:
     enforcement: Enabled
-    contactImageScanners: ScanIfMissing
     bypass: BreakGlassAnnotation
   perNode:
     taintToleration: TolerateTaints
