@@ -57,19 +57,39 @@ policies:
         name: acs-hub-init-bundle-job
 
   # ------------------------------------------------------------------ #
-  #  3. Managed – install RHACS operator and deploy SecuredCluster      #
+  #  3. Hub – copy init bundle secrets to the policy namespace          #
+  #     The hub template lookup restricts access to the policy's own    #
+  #     namespace. This step copies the TLS secrets from stackrox to    #
+  #     acm-policies using managed-cluster templates (no restriction).  #
+  #     Also stores the Central route host for SecuredCluster config.   #
+  #     Depends on: acs-hub-init-bundle (secrets must exist on hub)     #
+  # ------------------------------------------------------------------ #
+  - name: acs-hub-copy-secrets
+    description: "Copies ACS init bundle secrets from stackrox to the policy namespace"
+    placement:
+      placementName: acs-hub-placement
+    extraDependencies:
+      - name: acs-hub-init-bundle
+        compliance: Compliant
+    manifests:
+      - path: hub/copy-secrets-to-policy-ns.yml
+        name: acs-hub-copy-secrets
+
+  # ------------------------------------------------------------------ #
+  #  4. Managed – deploy SecuredCluster on managed clusters             #
+  #     The RHACS operator is installed on the hub by acs-hub-central.  #
+  #     On non-hub managed clusters the operator must be installed      #
+  #     separately (or add a dedicated operator policy for them).       #
+  #     Depends on: acs-hub-copy-secrets (Central info + TLS secrets)   #
   # ------------------------------------------------------------------ #
   - name: acs-managed-securedcluster
-    description: "Installs the RHACS operator and deploys SecuredCluster on managed clusters"
+    description: "Deploys SecuredCluster on managed clusters (RHACS operator assumed installed)"
     placement:
       placementName: acs-managed-placement
+    extraDependencies:
+      - name: acs-hub-copy-secrets
+        compliance: Compliant
     manifests:
-      - path: operator-namespace.yml
-        name: acs-managed-operator-ns
-
-      - path: operatorpolicy.yml
-        name: acs-managed-operator-install
-
       - path: stackrox-namespace.yml
         name: acs-managed-stackrox-ns
 
@@ -77,15 +97,15 @@ policies:
         name: acs-managed-securedcluster
 
   # ------------------------------------------------------------------ #
-  #  4. Managed – copy init bundle TLS secrets from hub                 #
-  #     Depends on: acs-hub-init-bundle (secrets must exist on hub)     #
+  #  5. Managed – distribute init bundle TLS secrets to managed clusters #
+  #     Depends on: acs-hub-copy-secrets (secrets in acm-policies ns)   #
   # ------------------------------------------------------------------ #
   - name: acs-managed-init-bundle
-    description: "Copies the init bundle TLS secrets from the hub to managed clusters"
+    description: "Distributes the init bundle TLS secrets from the hub to managed clusters"
     placement:
       placementName: acs-managed-placement
     extraDependencies:
-      - name: acs-hub-init-bundle
+      - name: acs-hub-copy-secrets
         compliance: Compliant
     manifests:
       - path: managed/init-bundle-secrets.yml
