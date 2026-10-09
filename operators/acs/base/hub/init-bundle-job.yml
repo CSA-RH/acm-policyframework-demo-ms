@@ -1,0 +1,77 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: create-cluster-init-bundle
+  namespace: stackrox
+spec:
+  template:
+    metadata:
+      labels:
+        app: create-init-bundle
+    spec:
+      serviceAccountName: create-init-bundle
+      restartPolicy: Never
+      containers:
+        - name: create-init-bundle
+          image: registry.redhat.io/openshift4/ose-cli:latest
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -eo pipefail
+
+              CENTRAL="https://central.stackrox.svc:443"
+              BUNDLE="acm-init-bundle"
+
+              echo "[-] Waiting for Central to be ready..."
+              attempt=0
+              until curl -sSk -o /dev/null \
+                    -u "admin:${PASSWORD}" "${CENTRAL}/v1/ping"; do
+                attempt=$((attempt + 1))
+                if [ "$attempt" -ge 30 ]; then
+                  echo "[!] Central not ready after 30 attempts — aborting"
+                  exit 1
+                fi
+                echo "    attempt ${attempt}/30 — retrying in 20 s..."
+                sleep 20
+              done
+              echo "[+] Central is ready"
+
+              echo "[-] Checking for existing init bundle..."
+              if curl -sSk -u "admin:${PASSWORD}" \
+                   "${CENTRAL}/v1/cluster-init/init-bundles" | \
+                 python3 -c "
+              import json, sys
+              items = json.load(sys.stdin).get('items', [])
+              sys.exit(0 if any(b['name'] == '${BUNDLE}' for b in items) else 1)
+              " 2>/dev/null; then
+                echo "[=] Init bundle '${BUNDLE}' already exists — skipping"
+                exit 0
+              fi
+
+              echo "[-] Creating init bundle '${BUNDLE}'..."
+              curl -sSk -u "admin:${PASSWORD}" \
+                -X POST -H "Content-Type: application/json" \
+                -d "{\"name\":\"${BUNDLE}\"}" \
+                "${CENTRAL}/v1/cluster-init/init-bundles" | \
+              python3 -c "
+              import json, sys, base64
+              resp = json.load(sys.stdin)
+              bundle = resp.get('kubectlBundle', '')
+              if not bundle:
+                  print('ERROR: no kubectlBundle in response', file=sys.stderr)
+                  sys.exit(1)
+              sys.stdout.write(base64.b64decode(bundle).decode())
+              " > /tmp/bundle.yaml
+
+              echo "[-] Applying init bundle secrets..."
+              oc apply -n stackrox -f /tmp/bundle.yaml
+              echo "[+] Init bundle secrets applied successfully"
+          env:
+            - name: PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: central-htpasswd
+                  key: password
+  backoffLimit: 10

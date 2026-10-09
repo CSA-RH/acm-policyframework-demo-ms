@@ -1,0 +1,19 @@
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: acs-managed-placement
+  namespace: acm-policies
+spec:
+  tolerations:
+    - key: cluster.open-cluster-management.io/unavailable
+      operator: Exists
+    - key: cluster.open-cluster-management.io/unreachable
+      operator: Exists
+  predicates:
+    - requiredClusterSelector:
+        labelSelector:
+          matchExpressions:
+            - key: environment
+              operator: In
+              values: ["dev", "prod"]

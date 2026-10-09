@@ -1,0 +1,92 @@
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PolicyGenerator
+metadata:
+  name: gen-policy-acs
+placementBindingDefaults:
+  name: binding-acs
+policyDefaults:
+  namespace: acm-policies
+  remediationAction: enforce
+  consolidateManifests: false
+  severity: high
+  categories:
+    - "CM Configuration Management"
+  controls:
+    - "CM-2 Baseline Configuration"
+  standards:
+    - "NIST SP 800-53"
+
+policies:
+  # ------------------------------------------------------------------ #
+  #  1. Hub – install RHACS operator and deploy Central                 #
+  # ------------------------------------------------------------------ #
+  - name: acs-hub-central
+    description: "Installs the RHACS operator and deploys Central on the hub cluster"
+    placement:
+      placementName: acs-hub-placement
+    manifests:
+      - path: operator-namespace.yml
+        name: acs-hub-operator-ns
+
+      - path: operatorpolicy.yml
+        name: acs-hub-operator-install
+
+      - path: stackrox-namespace.yml
+        name: acs-hub-stackrox-ns
+
+      - path: hub/central.yml
+        name: acs-hub-central
+
+  # ------------------------------------------------------------------ #
+  #  2. Hub – create init bundle for SecuredCluster authentication      #
+  #     Depends on: acs-hub-central (Central must be running)           #
+  # ------------------------------------------------------------------ #
+  - name: acs-hub-init-bundle
+    description: "Creates an init bundle on Central and stores the TLS secrets on the hub"
+    placement:
+      placementName: acs-hub-placement
+    extraDependencies:
+      - name: acs-hub-central
+        compliance: Compliant
+    manifests:
+      - path: hub/init-bundle-rbac.yml
+        name: acs-hub-init-bundle-rbac
+
+      - path: hub/init-bundle-job.yml
+        name: acs-hub-init-bundle-job
+
+  # ------------------------------------------------------------------ #
+  #  3. Managed – install RHACS operator and deploy SecuredCluster      #
+  # ------------------------------------------------------------------ #
+  - name: acs-managed-securedcluster
+    description: "Installs the RHACS operator and deploys SecuredCluster on managed clusters"
+    placement:
+      placementName: acs-managed-placement
+    manifests:
+      - path: operator-namespace.yml
+        name: acs-managed-operator-ns
+
+      - path: operatorpolicy.yml
+        name: acs-managed-operator-install
+
+      - path: stackrox-namespace.yml
+        name: acs-managed-stackrox-ns
+
+      - path: managed/securedcluster.yml
+        name: acs-managed-securedcluster
+
+  # ------------------------------------------------------------------ #
+  #  4. Managed – copy init bundle TLS secrets from hub                 #
+  #     Depends on: acs-hub-init-bundle (secrets must exist on hub)     #
+  # ------------------------------------------------------------------ #
+  - name: acs-managed-init-bundle
+    description: "Copies the init bundle TLS secrets from the hub to managed clusters"
+    placement:
+      placementName: acs-managed-placement
+    extraDependencies:
+      - name: acs-hub-init-bundle
+        compliance: Compliant
+    manifests:
+      - path: managed/init-bundle-secrets.yml
+        name: acs-managed-init-bundle-secrets

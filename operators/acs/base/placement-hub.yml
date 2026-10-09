@@ -1,0 +1,17 @@
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: acs-hub-placement
+  namespace: acm-policies
+spec:
+  tolerations:
+    - key: cluster.open-cluster-management.io/unavailable
+      operator: Exists
+    - key: cluster.open-cluster-management.io/unreachable
+      operator: Exists
+  predicates:
+    - requiredClusterSelector:
+        labelSelector:
+          matchLabels:
+            name: local-cluster

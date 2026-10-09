@@ -9,6 +9,8 @@ spec:
         repoURL: https://github.com/CSA-RH/acm-policyframework-demo-ms.git
         revision: main
         directories:
+          - path: operators/acs/base
+          - path: operators/cert-manager0-default/base
           - path: operators/compliance-operator/base
           - path: operators/cert-manager1-base-with-overlays/base
           - path: operators/cert-manager1-base-with-overlays/overlays/*

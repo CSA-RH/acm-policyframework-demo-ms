@@ -1,0 +1,17 @@
+---
+apiVersion: platform.stackrox.io/v1alpha1
+kind: SecuredCluster
+metadata:
+  name: stackrox-secured-cluster-services
+  namespace: stackrox
+spec:
+  clusterName: '{{hub .ManagedClusterName hub}}'
+  centralEndpoint: '{{hub (lookup "route.openshift.io/v1" "Route" "stackrox" "central").spec.host hub}}:443'
+  admissionControl:
+    enforcement: Enabled
+    contactImageScanners: ScanIfMissing
+    bypass: BreakGlassAnnotation
+  perNode:
+    taintToleration: TolerateTaints
+  scanner:
+    scannerComponent: AutoSense
