@@ -6,3 +6,4 @@ generators:
 resources:
   - placement-hub.yml
   - placement-managed.yml
+  - placement-all.yml
