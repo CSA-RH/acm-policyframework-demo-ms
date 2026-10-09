@@ -33,19 +33,6 @@ policies:
 
       - path: manifests/operatorpolicy.yml
 
-  - name: compliance-cis-scan
-    description: "Deploys the CIS benchmark scan configuration"
-    remediationAction: enforce
-    severity: high
-    manifests:
-      - path: manifests/scan/scansetting-cis.yml
-        name: compliance-scansetting-cis
-        complianceType: musthave
-
-      - path: manifests/scan/scansettingbinding-cis.yml
-        name: compliance-scansettingbinding-cis
-        complianceType: mustonlyhave
-
   - name: compliance-cis-results
     description: "Reports CIS scan results — non-compliant when checks fail"
     remediationAction: inform
