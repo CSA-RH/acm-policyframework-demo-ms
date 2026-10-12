@@ -1,12 +1,13 @@
 # =============================================================================
 # Placements for Compliance Operator policies
 #
-# Cluster labelling:
-#   Self-managed OCP:  vendor=OpenShift  (no platform label, or platform!=rosa-hcp)
-#   ROSA HCP:          vendor=OpenShift, platform=rosa-hcp
+# Cluster detection (automatic, no manual labels needed):
+#   Self-managed OCP:  product=OpenShift, controlplanetopology != External
+#   ROSA HCP:          product=ROSA, controlplanetopology=External
 #
-# Apply the label to ROSA HCP clusters:
-#   oc label managedcluster <name> platform=rosa-hcp
+# These use claimSelector on auto-populated ManagedCluster clusterClaims:
+#   - product.open-cluster-management.io:          "OpenShift" or "ROSA"
+#   - controlplanetopology.openshift.io:           "External" (HCP) or other
 # =============================================================================
 
 # --- All OpenShift clusters (bootstrap Job) ---
@@ -42,7 +43,7 @@ subjects:
     kind: PolicySet
     apiGroup: policy.open-cluster-management.io
 
-# --- Self-managed OCP clusters (no platform=rosa-hcp label) ---
+# --- Self-managed OCP clusters (controlplanetopology != External) ---
 ---
 apiVersion: cluster.open-cluster-management.io/v1beta1
 kind: Placement
@@ -60,10 +61,11 @@ spec:
         labelSelector:
           matchLabels:
             vendor: OpenShift
+        claimSelector:
           matchExpressions:
-            - key: platform
+            - key: controlplanetopology.openshift.io
               operator: NotIn
-              values: ["rosa-hcp"]
+              values: ["External"]
 ---
 apiVersion: policy.open-cluster-management.io/v1
 kind: PlacementBinding
@@ -79,7 +81,7 @@ subjects:
     kind: PolicySet
     apiGroup: policy.open-cluster-management.io
 
-# --- ROSA HCP clusters (platform=rosa-hcp label) ---
+# --- ROSA HCP clusters (controlplanetopology=External, product=ROSA) ---
 ---
 apiVersion: cluster.open-cluster-management.io/v1beta1
 kind: Placement
@@ -97,7 +99,14 @@ spec:
         labelSelector:
           matchLabels:
             vendor: OpenShift
-            platform: rosa-hcp
+        claimSelector:
+          matchExpressions:
+            - key: product.open-cluster-management.io
+              operator: In
+              values: ["ROSA"]
+            - key: controlplanetopology.openshift.io
+              operator: In
+              values: ["External"]
 ---
 apiVersion: policy.open-cluster-management.io/v1
 kind: PlacementBinding

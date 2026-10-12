@@ -2,9 +2,12 @@
 # Compliance Operator — ROSA HCP variant
 #
 # Identical to the base OperatorPolicy except:
-#   - PLATFORM=HyperShift env var is set, which tells the Compliance
-#     Operator to install only profiles relevant to HyperShift (node
-#     profiles). This reduces the number of profiles registered in ACS.
+#   - nodeSelector schedules operator pods on worker nodes (ROSA HCP has
+#     no accessible master/control-plane nodes).
+#   - The Compliance Operator auto-detects the HyperShift platform via
+#     controlPlaneTopology: External and loads only Node profiles.
+#
+# Ref: https://docs.okd.io/4.22/security/compliance_operator/co-management/compliance-operator-installation.html#installing-compliance-operator-rosa_compliance-operator-installation
 # =============================================================================
 ---
 apiVersion: policy.open-cluster-management.io/v1beta1
@@ -40,9 +43,6 @@ spec:
     config:
       nodeSelector:
         node-role.kubernetes.io/worker: ""
-      env:
-        - name: PLATFORM
-          value: "HyperShift"
   operatorGroup:
     name: compliance-operator
     targetNamespaces:
