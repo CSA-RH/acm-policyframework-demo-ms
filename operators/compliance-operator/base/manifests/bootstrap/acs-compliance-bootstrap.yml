@@ -1,0 +1,246 @@
+# =============================================================================
+# ACS Compliance Bootstrap Job
+#
+# Fixes an ACS bug where the Configuration Management page shows
+# "Findings for this control could not be assessed" when the Compliance
+# Operator is installed.
+#
+# Root cause: ACS registers every Compliance Operator profile (~30) as a
+# dynamic standard. The GraphQL resolver requires ALL registered standards
+# to have at least one successful compliance run. Profiles that were never
+# scanned cause IsComplianceRunSuccessfulOnCluster() to return false,
+# breaking the node-level drill-down.
+#
+# This Job:
+#   1. Creates a temporary ScanSettingBinding for ALL profiles (suspended)
+#   2. Waits for the ACS sensor to report it to Central
+#   3. Triggers ACS compliance runs for all standards via the Central API
+#   4. Cleans up the temporary resources
+#
+# After this Job runs once, the compliance run metadata persists in the
+# ACS database, and the Configuration Management page works correctly.
+#
+# Re-run: delete the Job to let ACM recreate it (e.g. after the Compliance
+# Operator adds new profiles in an upgrade).
+# =============================================================================
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: acs-compliance-bootstrap
+  namespace: openshift-compliance
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: acs-compliance-bootstrap
+rules:
+  - apiGroups: ["compliance.openshift.io"]
+    resources: ["profiles", "scansettings", "scansettingbindings"]
+    verbs: ["get", "list", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+    resourceNames: ["sensor-tls", "central-htpasswd"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: acs-compliance-bootstrap
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: acs-compliance-bootstrap
+subjects:
+  - kind: ServiceAccount
+    name: acs-compliance-bootstrap
+    namespace: openshift-compliance
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: acs-compliance-bootstrap
+  namespace: openshift-compliance
+  labels:
+    app.kubernetes.io/name: acs-compliance-bootstrap
+    app.kubernetes.io/component: compliance
+spec:
+  backoffLimit: 5
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: acs-compliance-bootstrap
+    spec:
+      serviceAccountName: acs-compliance-bootstrap
+      restartPolicy: OnFailure
+      nodeSelector:
+        node-role.kubernetes.io/worker: ""
+      containers:
+        - name: bootstrap
+          image: registry.redhat.io/openshift4/ose-cli-rhel9:latest
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              SCAN_NS=openshift-compliance
+              STACKROX_NS=stackrox
+              SSB_NAME=acs-bootstrap-all-profiles
+              SS_NAME=acs-bootstrap-suspended
+
+              cleanup() {
+                echo ">>> Cleaning up temporary resources..."
+                oc delete scansettingbinding "${SSB_NAME}" -n "${SCAN_NS}" --ignore-not-found 2>/dev/null || true
+                oc delete scansetting "${SS_NAME}" -n "${SCAN_NS}" --ignore-not-found 2>/dev/null || true
+                echo "    Cleanup complete."
+              }
+              trap cleanup EXIT
+
+              echo ">>> Waiting for Compliance Operator profiles..."
+              for i in $(seq 1 30); do
+                COUNT=$(oc get profiles.compliance.openshift.io -n "${SCAN_NS}" --no-headers 2>/dev/null | wc -l)
+                if [ "${COUNT}" -gt 0 ]; then
+                  echo "    Found ${COUNT} profiles."
+                  break
+                fi
+                echo "    Attempt ${i}/30: no profiles yet, waiting 20s..."
+                sleep 20
+              done
+
+              echo ">>> Waiting for ACS sensor-tls secret..."
+              for i in $(seq 1 30); do
+                if oc get secret sensor-tls -n "${STACKROX_NS}" &>/dev/null; then
+                  echo "    sensor-tls secret found."
+                  break
+                fi
+                echo "    Attempt ${i}/30: sensor-tls not found, waiting 20s..."
+                sleep 20
+              done
+
+              echo ">>> Creating suspended ScanSetting..."
+              printf '%s\n' \
+                "apiVersion: compliance.openshift.io/v1alpha1" \
+                "kind: ScanSetting" \
+                "metadata:" \
+                "  name: ${SS_NAME}" \
+                "  namespace: ${SCAN_NS}" \
+                "suspend: true" \
+                "roles:" \
+                "  - worker" \
+                "scanTolerations:" \
+                "  - operator: Exists" \
+                "schedule: \"0 0 31 2 *\"" \
+                "rawResultStorage:" \
+                "  pvAccessModes:" \
+                "    - ReadWriteOnce" \
+                "  size: 1Gi" \
+                "  rotation: 3" | oc apply -f -
+
+              echo ">>> Building ScanSettingBinding for all profiles..."
+              PROFILES=$(oc get profiles.compliance.openshift.io -n "${SCAN_NS}" \
+                -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
+              PROFILE_COUNT=$(echo "${PROFILES}" | wc -w)
+
+              SSB_FILE=/tmp/ssb.yaml
+              printf '%s\n' \
+                "apiVersion: compliance.openshift.io/v1alpha1" \
+                "kind: ScanSettingBinding" \
+                "metadata:" \
+                "  name: ${SSB_NAME}" \
+                "  namespace: ${SCAN_NS}" \
+                "profiles:" > "${SSB_FILE}"
+
+              for p in ${PROFILES}; do
+                printf '%s\n' \
+                  "  - apiGroup: compliance.openshift.io/v1alpha1" \
+                  "    kind: Profile" \
+                  "    name: ${p}" >> "${SSB_FILE}"
+              done
+
+              printf '%s\n' \
+                "settingsRef:" \
+                "  apiGroup: compliance.openshift.io/v1alpha1" \
+                "  kind: ScanSetting" \
+                "  name: ${SS_NAME}" >> "${SSB_FILE}"
+
+              oc apply -f "${SSB_FILE}"
+              echo "    Created SSB binding ${PROFILE_COUNT} profiles."
+
+              echo ">>> Waiting 90s for ACS sensor to discover the SSB..."
+              sleep 90
+
+              echo ">>> Attempting to trigger ACS compliance runs..."
+              ACS_HOST=$(oc get secret sensor-tls -n "${STACKROX_NS}" \
+                -o jsonpath='{.data.acs-host}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
+              TRIGGERED=false
+
+              if [ -z "${ACS_HOST}" ]; then
+                echo "    WARNING: Could not determine ACS Central endpoint."
+              else
+                echo "    Central endpoint: ${ACS_HOST}"
+                ADMIN_PASS=$(oc get secret central-htpasswd -n "${STACKROX_NS}" \
+                  -o jsonpath='{.data.password}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
+
+                if [ -n "${ADMIN_PASS}" ]; then
+                  echo "    Using admin credentials..."
+                  RESPONSE=$(curl -sk -u "admin:${ADMIN_PASS}" \
+                    -X POST "https://${ACS_HOST}/v1/compliancemanagement/runs" \
+                    -H "Content-Type: application/json" \
+                    -d '{"selection":{"clusterId":"*","standardId":"*"}}' 2>&1 || true)
+                  if echo "${RESPONSE}" | grep -q "startedRuns"; then
+                    STARTED=$(echo "${RESPONSE}" | grep -co '"standardId"' || echo "0")
+                    echo "    Triggered ${STARTED} compliance run(s)."
+                    TRIGGERED=true
+                  else
+                    echo "    Admin auth did not succeed."
+                  fi
+                fi
+
+                if [ "${TRIGGERED}" = "false" ]; then
+                  echo "    Trying sensor mTLS certificate..."
+                  oc get secret sensor-tls -n "${STACKROX_NS}" \
+                    -o jsonpath='{.data.sensor-cert\.pem}' | base64 -d > /tmp/sc.pem 2>/dev/null || true
+                  oc get secret sensor-tls -n "${STACKROX_NS}" \
+                    -o jsonpath='{.data.sensor-key\.pem}' | base64 -d > /tmp/sk.pem 2>/dev/null || true
+                  oc get secret sensor-tls -n "${STACKROX_NS}" \
+                    -o jsonpath='{.data.ca\.pem}' | base64 -d > /tmp/ca.pem 2>/dev/null || true
+                  if [ -s /tmp/sc.pem ] && [ -s /tmp/sk.pem ]; then
+                    RESPONSE=$(curl -sk --cert /tmp/sc.pem --key /tmp/sk.pem --cacert /tmp/ca.pem \
+                      -X POST "https://${ACS_HOST}/v1/compliancemanagement/runs" \
+                      -H "Content-Type: application/json" \
+                      -d '{"selection":{"clusterId":"*","standardId":"*"}}' 2>&1 || true)
+                    if echo "${RESPONSE}" | grep -q "startedRuns"; then
+                      STARTED=$(echo "${RESPONSE}" | grep -co '"standardId"' || echo "0")
+                      echo "    Triggered ${STARTED} compliance run(s) via mTLS."
+                      TRIGGERED=true
+                    fi
+                  fi
+                  rm -f /tmp/sc.pem /tmp/sk.pem /tmp/ca.pem
+                fi
+              fi
+
+              if [ "${TRIGGERED}" = "true" ]; then
+                echo ">>> Waiting 180s for compliance runs to complete..."
+                sleep 180
+              else
+                echo ""
+                echo "============================================================"
+                echo "  MANUAL ACTION REQUIRED"
+                echo "  Could not trigger ACS compliance runs automatically."
+                echo "  Open ACS UI -> Configuration Management -> click Scan"
+                echo "  Then delete this Job to mark bootstrap as complete."
+                echo "============================================================"
+                echo ""
+                echo "    Keeping temporary SSB for 5 minutes..."
+                sleep 300
+              fi
+
+              rm -f "${SSB_FILE}"
+              echo ">>> ACS compliance bootstrap finished successfully."

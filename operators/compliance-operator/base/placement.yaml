@@ -1,8 +1,20 @@
+# =============================================================================
+# Placements for Compliance Operator policies
+#
+# Cluster labelling:
+#   Self-managed OCP:  vendor=OpenShift  (no platform label, or platform!=rosa-hcp)
+#   ROSA HCP:          vendor=OpenShift, platform=rosa-hcp
+#
+# Apply the label to ROSA HCP clusters:
+#   oc label managedcluster <name> platform=rosa-hcp
+# =============================================================================
+
+# --- All OpenShift clusters (bootstrap Job) ---
 ---
 apiVersion: cluster.open-cluster-management.io/v1beta1
 kind: Placement
 metadata:
-  name: placement-all-clusters-operators
+  name: placement-compliance-all
   namespace: acm-policies
 spec:
   tolerations:
@@ -19,13 +31,84 @@ spec:
 apiVersion: policy.open-cluster-management.io/v1
 kind: PlacementBinding
 metadata:
-  name: binding-all-clusters-operators
+  name: binding-compliance-all
   namespace: acm-policies
 placementRef:
-  name: placement-all-clusters-operators
+  name: placement-compliance-all
   kind: Placement
   apiGroup: cluster.open-cluster-management.io
 subjects:
-  - name: all-clusters-operators
+  - name: compliance-all-clusters
+    kind: PolicySet
+    apiGroup: policy.open-cluster-management.io
+
+# --- Self-managed OCP clusters (no platform=rosa-hcp label) ---
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: placement-compliance-self-managed
+  namespace: acm-policies
+spec:
+  tolerations:
+    - key: cluster.open-cluster-management.io/unavailable
+      operator: Exists
+    - key: cluster.open-cluster-management.io/unreachable
+      operator: Exists
+  predicates:
+    - requiredClusterSelector:
+        labelSelector:
+          matchLabels:
+            vendor: OpenShift
+          matchExpressions:
+            - key: platform
+              operator: NotIn
+              values: ["rosa-hcp"]
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: binding-compliance-self-managed
+  namespace: acm-policies
+placementRef:
+  name: placement-compliance-self-managed
+  kind: Placement
+  apiGroup: cluster.open-cluster-management.io
+subjects:
+  - name: compliance-self-managed
+    kind: PolicySet
+    apiGroup: policy.open-cluster-management.io
+
+# --- ROSA HCP clusters (platform=rosa-hcp label) ---
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: placement-compliance-rosa-hcp
+  namespace: acm-policies
+spec:
+  tolerations:
+    - key: cluster.open-cluster-management.io/unavailable
+      operator: Exists
+    - key: cluster.open-cluster-management.io/unreachable
+      operator: Exists
+  predicates:
+    - requiredClusterSelector:
+        labelSelector:
+          matchLabels:
+            vendor: OpenShift
+            platform: rosa-hcp
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: binding-compliance-rosa-hcp
+  namespace: acm-policies
+placementRef:
+  name: placement-compliance-rosa-hcp
+  kind: Placement
+  apiGroup: cluster.open-cluster-management.io
+subjects:
+  - name: compliance-rosa-hcp
     kind: PolicySet
     apiGroup: policy.open-cluster-management.io

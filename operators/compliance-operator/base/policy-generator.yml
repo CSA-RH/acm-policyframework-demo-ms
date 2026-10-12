@@ -8,7 +8,7 @@ policyDefaults:
   remediationAction: enforce
   consolidateManifests: false
   policySets:
-    - all-clusters-operators
+    - compliance-all-clusters
   generatePlacementWhenInSet: false
 
   categories:
@@ -24,28 +24,61 @@ policyDefaults:
   severity: medium
 
 policies:
+  # ------------------------------------------------------------------ #
+  #  1. Install the Compliance Operator (self-managed clusters)         #
+  # ------------------------------------------------------------------ #
   - name: compliance-operator
-    description: "Installs the Compliance Operator"
+    description: "Installs the Compliance Operator on self-managed clusters"
     remediationAction: enforce
+    policySets:
+      - compliance-self-managed
     manifests:
       - path: manifests/namespace.yml
         name: compliance-namespace
 
       - path: manifests/operatorpolicy.yml
 
-  - name: compliance-cis-results
-    description: "Reports CIS scan results — non-compliant when checks fail"
-    remediationAction: inform
-    severity: high
-    standards:
-      - NIST SP 800-53
-      - CIS OpenShift Container Platform 4 Benchmark
+  # ------------------------------------------------------------------ #
+  #  2. Install the Compliance Operator (ROSA HCP clusters)             #
+  #     Uses PLATFORM=HyperShift env var to install only node profiles. #
+  # ------------------------------------------------------------------ #
+  - name: compliance-operator-rosa-hcp
+    description: "Installs the Compliance Operator on ROSA HCP clusters with HyperShift platform config"
+    remediationAction: enforce
+    policySets:
+      - compliance-rosa-hcp
     manifests:
-      - path: manifests/scan/cis-suite-status.yml
+      - path: manifests/namespace.yml
+        name: compliance-namespace-rosa
 
-      - path: manifests/scan/cis-results.yml
+      - path: manifests/operatorpolicy-rosa-hcp.yml
+
+  # ------------------------------------------------------------------ #
+  #  3. ACS Configuration Management bootstrap                         #
+  #     Runs a one-time Job that creates a temporary SSB for all        #
+  #     Compliance Operator profiles, triggers ACS compliance scans     #
+  #     for all registered standards, then cleans up.                   #
+  #     This fixes the ACS bug where the Configuration Management      #
+  #     page shows "Findings for this control could not be assessed".   #
+  #                                                                     #
+  #     Scan scheduling is managed from the ACS UI — this policy does   #
+  #     NOT create persistent ScanSettingBindings.                       #
+  # ------------------------------------------------------------------ #
+  - name: compliance-acs-bootstrap
+    description: "One-time bootstrap to populate ACS compliance run metadata for all Compliance Operator profiles"
+    remediationAction: enforce
+    manifests:
+      - path: manifests/bootstrap/acs-compliance-bootstrap.yml
 
 policySets:
-  - name: all-clusters-operators
-    description: "Operator policies for all managed clusters (enforce + inform)"
+  - name: compliance-all-clusters
+    description: "Compliance policies for all managed clusters"
+    generatePolicySetPlacement: false
+
+  - name: compliance-self-managed
+    description: "Compliance Operator for self-managed OCP clusters"
+    generatePolicySetPlacement: false
+
+  - name: compliance-rosa-hcp
+    description: "Compliance Operator for ROSA HCP clusters"
     generatePolicySetPlacement: false

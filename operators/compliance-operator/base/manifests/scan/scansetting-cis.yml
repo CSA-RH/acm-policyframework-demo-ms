@@ -1,3 +1,12 @@
+# =============================================================================
+# CIS ScanSetting (reference only — not deployed by current policies)
+#
+# NOTE: Scan scheduling is managed from the ACS UI (Option B).
+# This file is kept for reference if you switch to ACM-managed scans.
+#
+# For ROSA HCP clusters, change roles to [worker] only — ROSA HCP has
+# no master nodes accessible to the customer.
+# =============================================================================
 ---
 apiVersion: compliance.openshift.io/v1alpha1
 autoApplyRemediations: false
@@ -10,7 +19,6 @@ metadata:
 rawResultStorage:
   nodeSelector:
     node-role.kubernetes.io/worker: ""
-  # storageClassName: gp3-csi  # uncomment and set if your cluster does not have a default StorageClass
   pvAccessModes:
   - ReadWriteOnce
   rotation: 3
@@ -19,6 +27,8 @@ rawResultStorage:
   - operator: Exists
     key: node-role.kubernetes.io/infra
 roles:
+  # Self-managed: [master, worker]
+  # ROSA HCP:     [worker]  (no master nodes)
   - master
   - worker
 scanTolerations:
